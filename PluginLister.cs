@@ -8,7 +8,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("PluginLister", "Milestorme", "1.3.4")]
+    [Info("PluginLister", "Milestorme", "1.3.5")]
     [Description("Lists installed plugins and sends the data to a Discord webhook.")]
     public class PluginLister : CovalencePlugin
     {
@@ -42,23 +42,41 @@ namespace Oxide.Plugins
             }
         }
 
-		protected override void SaveConfig() => Config.WriteObject(config, true);
+        protected override void SaveConfig() => Config.WriteObject(config, true);
 
-            [Command("listplugins", "pluginlister.listplugins")]
-			private void ListPluginsCommand(IPlayer player, string command, string[] args)
-		{
-			// Check if the player has admin rights
-			if (!player.HasPermission("pluginlister.admin") && !player.IsAdmin)
-			{
-					player.Reply("You do not have permission to use this command.");
-				return;
-			}
+        private void CreatePermissionGroup()
+        {
+            // Create a custom permission group for PluginLister admins
+            if (!permission.GroupExists("pluginlister.admin"))
+            {
+                // The third parameter `0` is the rank (you can change it if needed)
+                permission.CreateGroup("pluginlister.admin", "admin", 0); 
+                Puts("Created 'pluginlister.admin' permission group.");
+            }
 
-			if (!config.EnablePlugin)
-			{
-				player.Reply("This plugin is currently disabled.");
-				return;
-			}
+            // Grant the group the necessary permission
+            if (!permission.PermissionExists("pluginlister.listplugins"))
+            {
+                permission.RegisterPermission("pluginlister.listplugins", this);
+                Puts("Registered 'pluginlister.listplugins' permission.");
+            }
+        }
+
+        [Command("listplugins", "pluginlister.listplugins")]
+        private void ListPluginsCommand(IPlayer player, string command, string[] args)
+        {
+            // Check if the player has admin rights
+            if (!player.HasPermission("pluginlister.admin") && !player.IsAdmin)
+            {
+                player.Reply("You do not have permission to use this command.");
+                return;
+            }
+
+            if (!config.EnablePlugin)
+            {
+                player.Reply("This plugin is currently disabled.");
+                return;
+            }
 
             // Get installed plugins
             var plugins = Interface.Oxide.RootPluginManager.GetPlugins().ToList(); // Convert IEnumerable to List<Plugin>
@@ -98,7 +116,7 @@ namespace Oxide.Plugins
 
             string messageContent = $"Installed Plugins:\n{string.Join("\n", pluginNamesWithVersions)}";
 
-            // Split the message into smaller chunks if it exceeds 2000 characters
+            // Split the message into chunks if it exceeds 2000 characters
             var messages = SplitMessage(messageContent);
 
             // Send each chunk to Discord
@@ -162,6 +180,12 @@ namespace Oxide.Plugins
                 Oxide.Core.Libraries.RequestMethod.POST,
                 headers
             );
+        }
+
+        // This method will be called when the plugin is loaded
+        private void OnServerInitialized()
+        {
+            CreatePermissionGroup(); // Create the permission group when the plugin is loaded
         }
     }
 }
