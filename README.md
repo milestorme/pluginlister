@@ -1,4 +1,4 @@
-luginLister, is designed for Oxide-based servers (like Rust) and performs the following tasks:
+PluginLister, is designed for Oxide-based servers (like Rust) and performs the following tasks:
 
 Key Functions:List Installed Plugins:
 
