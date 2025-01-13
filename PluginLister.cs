@@ -1,22 +1,3 @@
-// Copyright (c) 2025 Milestorme
-// 
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is provided
-// to do so, subject to the following conditions:
-// 
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-// 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-// INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-// PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-// HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
-// CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
-// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -27,7 +8,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("PluginLister", "Milestorme", "1.3.3")]
+    [Info("PluginLister", "Milestorme", "1.3.4")]
     [Description("Lists installed plugins and sends the data to a Discord webhook.")]
     public class PluginLister : CovalencePlugin
     {
@@ -61,16 +42,126 @@ namespace Oxide.Plugins
             }
         }
 
-        protected override void SaveConfig() => Config.WriteObject(config, true);
+		protected override void SaveConfig() => Config.WriteObject(config, true);
 
-        [Command("listplugins", "pluginlister.listplugins")]
-        private void ListPluginsCommand(IPlayer player, string command, string[] args)
-        {
-            if (!config.EnablePlugin)
+            [Command("listplugins", "pluginlister.listplugins")]
+			private void ListPluginsCommand(IPlayer player, string command, string[] args)
+		{
+			// Check if the player has admin rights
+			if (!player.HasPermission("pluginlister.admin") && !player.IsAdmin)
+			{
+					player.Reply("You do not have permission to use this command.");
+				return;
+			}
+
+			if (!config.EnablePlugin)
+			{
+				player.Reply("This plugin is currently disabled.");
+				return;
+			}
+
+            // Get installed plugins
+            var plugins = Interface.Oxide.RootPluginManager.GetPlugins().ToList(); // Convert IEnumerable to List<Plugin>
+            var pluginNames = new List<string>();
+            foreach (var plugin in plugins)
             {
-                player.Reply("This plugin is currently disabled.");
+                pluginNames.Add(plugin.Title); // Only add plugin name for in-game output
+            }
+
+            string pluginList = string.Join("\n", pluginNames); // Join plugin names with new lines
+
+            // Send response to player (only plugin names in-game)
+            player.Reply($"Installed Plugins:\n{pluginList}");
+
+            // Send plugin list to Discord if enabled
+            if (config.EnableDiscordWebhook)
+            {
+                SendToDiscord(plugins); // Send full plugin info (name + version) to Discord
+            }
+        }
+
+        private void SendToDiscord(List<Plugin> plugins)
+        {
+            if (string.IsNullOrEmpty(config.WebhookUrl) || config.WebhookUrl == "YOUR_DISCORD_WEBHOOK_URL_HERE")
+            {
+                Puts("Webhook URL is not configured or is using the default placeholder.");
                 return;
             }
 
-            // Get installed plugins
-            var plugins = 
+            // Build the message content for Discord (with plugin names and version numbers)
+            var pluginNamesWithVersions = new List<string>();
+            foreach (var plugin in plugins)
+            {
+                // Make plugin name bold and version normal
+                pluginNamesWithVersions.Add($"**{plugin.Title}** v{plugin.Version}");
+            }
+
+            string messageContent = $"Installed Plugins:\n{string.Join("\n", pluginNamesWithVersions)}";
+
+            // Split the message into smaller chunks if it exceeds 2000 characters
+            var messages = SplitMessage(messageContent);
+
+            // Send each chunk to Discord
+            foreach (var message in messages)
+            {
+                SendMessageToDiscord(message);
+            }
+        }
+
+        private List<string> SplitMessage(string message)
+        {
+            const int maxLength = 2000;
+            var messages = new List<string>();
+
+            while (message.Length > maxLength)
+            {
+                // Find the last full line within the max length
+                int splitIndex = message.LastIndexOf("\n", maxLength, StringComparison.OrdinalIgnoreCase);
+                if (splitIndex == -1) splitIndex = maxLength;
+
+                // Split the message into chunks and add to the list
+                messages.Add(message.Substring(0, splitIndex).Trim());
+                message = message.Substring(splitIndex).Trim();
+            }
+
+            // Add the remaining part of the message
+            if (message.Length > 0)
+                messages.Add(message);
+
+            return messages;
+        }
+
+        private void SendMessageToDiscord(string message)
+        {
+            var payload = new
+            {
+                content = message
+            };
+
+            var headers = new Dictionary<string, string>
+            {
+                { "Content-Type", "application/json" }
+            };
+
+            // Send request to Discord
+            webrequest.Enqueue(
+                config.WebhookUrl,
+                JsonConvert.SerializeObject(payload),
+                (code, response) =>
+                {
+                    if (code != 200 || response == null)
+                    {
+                        Puts($"Failed to send data to Discord. Response code: {code}. Response: {response}");
+                    }
+                    else
+                    {
+                        Puts("Successfully sent data to Discord!");
+                    }
+                },
+                this,
+                Oxide.Core.Libraries.RequestMethod.POST,
+                headers
+            );
+        }
+    }
+}
