@@ -24,6 +24,7 @@ The message that is sent to Discord contains a list of installed plugins in a fo
 markdown
 
 **Plugin Name** v1.0.0
+
 **Another Plugin** v1.2.3
 
 
