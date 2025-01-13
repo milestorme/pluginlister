@@ -1,36 +1,27 @@
-# pluginlister
-Displays installed plugins in-game and to discord
+luginLister, is designed for Oxide-based servers (like Rust) and performs the following tasks:
 
-This plugin, PluginLister, is designed for use on Oxide-powered game servers (such as Rust, for example) to list all installed plugins and send this information to a specified Discord webhook.
+Key Functions:List Installed Plugins:
 
-Here's a detailed breakdown of the functionality:
-1. Listing Installed Plugins
-The plugin provides a command (/listplugins or /pluginlister.listplugins), which can be executed by an in-game player. When a player runs this command, the plugin collects and lists all the plugins currently installed on the server.
-The list includes the names and versions of each plugin.
-2. Sending Plugin Information to Discord
-If enabled in the configuration, the plugin also sends the list of installed plugins to a Discord channel via a webhook.
-The message sent to Discord includes the plugin name and version for each plugin, in a formatted message.
-3. Configuration Options:
-Enable Plugin: The plugin can be turned on or off. If it's disabled, the /listplugins command will inform the player that the plugin is not active.
-Enable Discord Webhook: If this is set to true, the plugin will send the list of plugins to the Discord webhook. The webhook URL must be configured in the plugin’s settings.
-Webhook URL: The Discord webhook URL where the plugin data will be sent.
-Permission Management:
+The plugin allows users to view a list of all installed plugins on the server. This can be done by using the command listplugins in the game.Admin Permission Required:
 
-The plugin automatically creates the permission group pluginlister.admin if it doesn’t exist. It also ensures that the necessary permissions (pluginlister.listplugins) are available for players in this group.
-Server admins can assign this permission group to players using commands like oxide.grant.
+Only players with specific permissions (pluginlister.admin) can use the command. This ensures that only authorized users (like server admins) can access the plugin list.Discord Integration:
 
-5. Discord Message Formatting:
-The message that is sent to Discord contains a list of installed plugins in a format like:
-markdown
+The plugin can send a list of installed plugins (including their names and versions) to a Discord channel via a webhook. This is useful for admins who want to keep track of the server's plugins externally.The webhook URL is configurable, allowing you to send the data to any Discord channel of your choice.Custom Permission Group:
 
-**Plugin Name** v1.0.0
+The plugin automatically creates a custom permission group named pluginlister.admin. Players assigned to this group will be able to execute the listplugins command.
 
-**Another Plugin** v1.2.3
+This permission group is created upon server initialization, and the necessary permissions are granted to the group.How It Works:Command Execution:
 
+When a player types the /listplugins command, the plugin checks if the player has the necessary permission (pluginlister.admin). If the player is authorized, it lists all installed plugins in the game.Sending Data to Discord:
 
-If there are too many plugins and the message exceeds Discord's 2000-character limit, the message will be split into multiple chunks and sent in several messages.
-5. Error Handling:
-The plugin includes basic error handling for the Discord webhook. If the webhook URL is not set or is incorrectly configured, it will print an error message in the server console.
-If the Discord API responds with an error or the message cannot be sent, the plugin will log the failure in the console.
-In summary:
-The PluginLister plugin allows server admins or authorized players to list the installed plugins on an Oxide-powered server and have that list automatically posted to a Discord channel using a webhook. This helps admins keep track of the server’s plugins remotely through Discord, making server management easier.
+If the webhook URL is set and active, the plugin sends a message to a specified Discord channel. The message includes the list of installed plugins, along with their version numbers.The message is split into chunks if it exceeds Discord's message size limit (2000 characters).Permission Management:
+
+The plugin automatically creates the permission group pluginlister.admin if it doesn’t exist. It also ensures that the necessary permissions (pluginlister.listplugins) are available for players in this group.Server admins can assign this permission group to players using commands like oxide.grant.Configuration:Plugin Enable/Disable:You can enable or disable the plugin entirely using a configuration setting (EnablePlugin).Discord Webhook:You need to provide a valid Discord webhook URL in the config file (WebhookUrl) to enable sending plugin data to Discord.Benefits:Ease of Use: Admins can easily see the plugins running on their server via the in-game command or on Discord.Automation: The plugin automatically handles permissions and sends data to Discord without requiring additional manual steps after setup.Security: Only players with the correct permission can execute the command, making it secure for server administration.Example Use:Assign Permissions: You need to grant the pluginlister.admin permission to players who should be able to view the plugin list.
+
+oxide.grant user <player_name> pluginlister.adminUse Command: Players with the pluginlister.admin permission can run:
+
+listpluginsThis will show them a list of installed plugins in the game.
+
+View on Discord: If the Discord webhook is configured, the plugin will also send the list of installed plugins to the specified Discord channel.
+
+Summary:The PluginLister plugin is a useful tool for server administrators, allowing them to easily view and share a list of installed plugins on their server both in-game and on Discord. It requires minimal setup and ensures that only authorized users can access sensitive plugin information.
