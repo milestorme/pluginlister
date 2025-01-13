@@ -8,18 +8,29 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("PluginLister", "Milestorme", "1.3.5")]
+    [Info("PluginLister", "Milestorme", "1.3.7")]
     [Description("Lists installed plugins and sends the data to a Discord webhook.")]
     public class PluginLister : CovalencePlugin
     {
         private PluginConfig config;
+        private Dictionary<string, DateTime> cooldowns = new Dictionary<string, DateTime>();
 
         private class PluginConfig
         {
-            public bool EnablePlugin { get; set; } = true; // Enable or disable the plugin entirely
-            public bool EnableDiscordWebhook { get; set; } = true; // Enable or disable sending to Discord
-            public string WebhookUrl { get; set; } = "YOUR_DISCORD_WEBHOOK_URL_HERE"; // Discord webhook URL
+            public bool EnablePlugin { get; set; } = true;
+            public bool EnableDiscordWebhook { get; set; } = true;
+            public string WebhookUrl { get; set; } = "YOUR_DISCORD_WEBHOOK_URL_HERE";
+            public int CommandCooldownSeconds { get; set; } = 30; // Cooldown in seconds
         }
+
+        private static readonly Dictionary<string, string> Localization = new Dictionary<string, string>
+        {
+            { "NoPermission", "You do not have permission to use this command." },
+            { "PluginDisabled", "This plugin is currently disabled." },
+            { "NoPlugins", "No plugins are currently installed." },
+            { "CooldownMessage", "You must wait {0} seconds before using this command again." },
+            { "PluginsListed", "Installed Plugins ({0}):\n{1}" }
+        };
 
         protected override void LoadDefaultConfig()
         {
@@ -46,15 +57,12 @@ namespace Oxide.Plugins
 
         private void CreatePermissionGroup()
         {
-            // Create a custom permission group for PluginLister admins
             if (!permission.GroupExists("pluginlister.admin"))
             {
-                // The third parameter `0` is the rank (you can change it if needed)
-                permission.CreateGroup("pluginlister.admin", "admin", 0); 
+                permission.CreateGroup("pluginlister.admin", "admin", 0);
                 Puts("Created 'pluginlister.admin' permission group.");
             }
 
-            // Grant the group the necessary permission
             if (!permission.PermissionExists("pluginlister.listplugins"))
             {
                 permission.RegisterPermission("pluginlister.listplugins", this);
@@ -65,36 +73,41 @@ namespace Oxide.Plugins
         [Command("listplugins", "pluginlister.listplugins")]
         private void ListPluginsCommand(IPlayer player, string command, string[] args)
         {
-            // Check if the player has admin rights
             if (!player.HasPermission("pluginlister.admin") && !player.IsAdmin)
             {
-                player.Reply("You do not have permission to use this command.");
+                player.Reply(Localization["NoPermission"]);
                 return;
             }
 
             if (!config.EnablePlugin)
             {
-                player.Reply("This plugin is currently disabled.");
+                player.Reply(Localization["PluginDisabled"]);
                 return;
             }
 
-            // Get installed plugins
-            var plugins = Interface.Oxide.RootPluginManager.GetPlugins().ToList(); // Convert IEnumerable to List<Plugin>
-            var pluginNames = new List<string>();
-            foreach (var plugin in plugins)
+            if (cooldowns.ContainsKey(player.Id) && cooldowns[player.Id] > DateTime.Now)
             {
-                pluginNames.Add(plugin.Title); // Only add plugin name for in-game output
+                var remaining = (cooldowns[player.Id] - DateTime.Now).TotalSeconds;
+                player.Reply(string.Format(Localization["CooldownMessage"], Math.Ceiling(remaining)));
+                return;
             }
 
-            string pluginList = string.Join("\n", pluginNames); // Join plugin names with new lines
+            cooldowns[player.Id] = DateTime.Now.AddSeconds(config.CommandCooldownSeconds);
 
-            // Send response to player (only plugin names in-game)
-            player.Reply($"Installed Plugins:\n{pluginList}");
+            var plugins = Interface.Oxide.RootPluginManager.GetPlugins().ToList();
+            if (!plugins.Any())
+            {
+                player.Reply(Localization["NoPlugins"]);
+                return;
+            }
 
-            // Send plugin list to Discord if enabled
+            var pluginNames = plugins.Select(p => p.Title).ToList();
+            var pluginList = string.Join("\n", pluginNames);
+            player.Reply(string.Format(Localization["PluginsListed"], pluginNames.Count, pluginList));
+
             if (config.EnableDiscordWebhook)
             {
-                SendToDiscord(plugins); // Send full plugin info (name + version) to Discord
+                SendToDiscord(plugins);
             }
         }
 
@@ -106,70 +119,43 @@ namespace Oxide.Plugins
                 return;
             }
 
-            // Build the message content for Discord (with plugin names and version numbers)
-            var pluginNamesWithVersions = new List<string>();
-            foreach (var plugin in plugins)
+            var pluginDetails = plugins.Select(p => new { Name = p.Title, Version = p.Version }).ToList();
+            var embed = new
             {
-                // Make plugin name bold and version normal
-                pluginNamesWithVersions.Add($"**{plugin.Title}** v{plugin.Version}");
-            }
-
-            string messageContent = $"Installed Plugins:\n{string.Join("\n", pluginNamesWithVersions)}";
-
-            // Split the message into chunks if it exceeds 2000 characters
-            var messages = SplitMessage(messageContent);
-
-            // Send each chunk to Discord
-            foreach (var message in messages)
-            {
-                SendMessageToDiscord(message);
-            }
-        }
-
-        private List<string> SplitMessage(string message)
-        {
-            const int maxLength = 2000;
-            var messages = new List<string>();
-
-            while (message.Length > maxLength)
-            {
-                // Find the last full line within the max length
-                int splitIndex = message.LastIndexOf("\n", maxLength, StringComparison.OrdinalIgnoreCase);
-                if (splitIndex == -1) splitIndex = maxLength;
-
-                // Split the message into chunks and add to the list
-                messages.Add(message.Substring(0, splitIndex).Trim());
-                message = message.Substring(splitIndex).Trim();
-            }
-
-            // Add the remaining part of the message
-            if (message.Length > 0)
-                messages.Add(message);
-
-            return messages;
-        }
-
-        private void SendMessageToDiscord(string message)
-        {
-            var payload = new
-            {
-                content = message
+                embeds = new[]
+                {
+                    new
+                    {
+                        title = "Installed Plugins",
+                        description = string.Join("\n", pluginDetails.Select(p => $"**{p.Name}** v{p.Version}")),
+                        color = 3447003
+                    }
+                }
             };
 
+            SendDiscordPayload(JsonConvert.SerializeObject(embed));
+        }
+
+        private void SendDiscordPayload(string payload, int retryCount = 0)
+        {
             var headers = new Dictionary<string, string>
             {
                 { "Content-Type", "application/json" }
             };
 
-            // Send request to Discord
             webrequest.Enqueue(
                 config.WebhookUrl,
-                JsonConvert.SerializeObject(payload),
+                payload,
                 (code, response) =>
                 {
-                    if (code != 200 || response == null)
+                    if (code != 200 && code != 204)
                     {
                         Puts($"Failed to send data to Discord. Response code: {code}. Response: {response}");
+
+                        if (retryCount < 3) // Retry up to 3 times
+                        {
+                            timer.Once(5f, () => SendDiscordPayload(payload, retryCount + 1));
+                        }
                     }
                     else
                     {
@@ -182,10 +168,9 @@ namespace Oxide.Plugins
             );
         }
 
-        // This method will be called when the plugin is loaded
         private void OnServerInitialized()
         {
-            CreatePermissionGroup(); // Create the permission group when the plugin is loaded
+            CreatePermissionGroup();
         }
     }
 }
