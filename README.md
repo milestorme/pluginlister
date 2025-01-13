@@ -14,12 +14,16 @@ The message sent to Discord includes the plugin name and version for each plugin
 Enable Plugin: The plugin can be turned on or off. If it's disabled, the /listplugins command will inform the player that the plugin is not active.
 Enable Discord Webhook: If this is set to true, the plugin will send the list of plugins to the Discord webhook. The webhook URL must be configured in the plugin’s settings.
 Webhook URL: The Discord webhook URL where the plugin data will be sent.
-4. Discord Message Formatting:
+Permission Management:
+
+The plugin automatically creates the permission group pluginlister.admin if it doesn’t exist. It also ensures that the necessary permissions (pluginlister.listplugins) are available for players in this group.
+Server admins can assign this permission group to players using commands like oxide.grant.
+
+5. Discord Message Formatting:
 The message that is sent to Discord contains a list of installed plugins in a format like:
 markdown
 
 **Plugin Name** v1.0.0
-
 **Another Plugin** v1.2.3
 
 
