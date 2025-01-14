@@ -8,20 +8,23 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("PluginLister", "Milestorme", "1.3.7")]
+    [Info("PluginLister", "Milestorme", "1.3.13")]
     [Description("Lists installed plugins and sends the data to a Discord webhook.")]
     public class PluginLister : CovalencePlugin
     {
         private PluginConfig config;
-        private Dictionary<string, DateTime> cooldowns = new Dictionary<string, DateTime>();
+        private const string CurrentConfigVersion = "1.1";
 
         private class PluginConfig
         {
             public bool EnablePlugin { get; set; } = true;
             public bool EnableDiscordWebhook { get; set; } = true;
             public string WebhookUrl { get; set; } = "YOUR_DISCORD_WEBHOOK_URL_HERE";
-            public int CommandCooldownSeconds { get; set; } = 30; // Cooldown in seconds
+            public int CommandCooldownSeconds { get; set; } = 30;
+            public string ConfigVersion { get; set; } = CurrentConfigVersion;
         }
+
+        private Dictionary<string, DateTime> cooldowns = new Dictionary<string, DateTime>();
 
         private static readonly Dictionary<string, string> Localization = new Dictionary<string, string>
         {
@@ -45,28 +48,55 @@ namespace Oxide.Plugins
             {
                 config = Config.ReadObject<PluginConfig>();
                 if (config == null) throw new Exception("Configuration file is null");
+
+                // Logging config version to verify it is loaded correctly
+                Puts("Config loaded successfully.");
+                Puts("Config Version: " + config.ConfigVersion);
+
+                if (config.ConfigVersion != CurrentConfigVersion)
+                {
+                    Puts("Updating configuration to match the latest version.");
+                    UpdateConfig();
+                }
             }
             catch
             {
-                PrintError("Configuration file is corrupted or missing, creating a new one.");
+                Puts("Configuration file is corrupted or missing, creating a new one.");
                 LoadDefaultConfig();
             }
         }
 
         protected override void SaveConfig() => Config.WriteObject(config, true);
 
+        private void UpdateConfig()
+        {
+            if (string.IsNullOrEmpty(config.WebhookUrl))
+                config.WebhookUrl = "YOUR_DISCORD_WEBHOOK_URL_HERE";
+            if (config.CommandCooldownSeconds <= 0)
+                config.CommandCooldownSeconds = 30;
+
+            config.ConfigVersion = CurrentConfigVersion;
+            SaveConfig();
+        }
+
+        private void ConditionalPrint(string message)
+        {
+            // Always print the message to the server console
+            Puts(message);
+        }
+
         private void CreatePermissionGroup()
         {
             if (!permission.GroupExists("pluginlister.admin"))
             {
                 permission.CreateGroup("pluginlister.admin", "admin", 0);
-                Puts("Created 'pluginlister.admin' permission group.");
+                ConditionalPrint("Created 'pluginlister.admin' permission group.");
             }
 
             if (!permission.PermissionExists("pluginlister.listplugins"))
             {
                 permission.RegisterPermission("pluginlister.listplugins", this);
-                Puts("Registered 'pluginlister.listplugins' permission.");
+                ConditionalPrint("Registered 'pluginlister.listplugins' permission.");
             }
         }
 
@@ -101,7 +131,9 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var pluginNames = plugins.Select(p => p.Title).ToList();
+            var pluginNames = plugins
+                .Select((p, i) => $"{i + 1}. {p.Title}") // Numbering the plugins
+                .ToList();
             var pluginList = string.Join("\n", pluginNames);
             player.Reply(string.Format(Localization["PluginsListed"], pluginNames.Count, pluginList));
 
@@ -115,19 +147,19 @@ namespace Oxide.Plugins
         {
             if (string.IsNullOrEmpty(config.WebhookUrl) || config.WebhookUrl == "YOUR_DISCORD_WEBHOOK_URL_HERE")
             {
-                Puts("Webhook URL is not configured or is using the default placeholder.");
+                ConditionalPrint("Webhook URL is not configured or is using the default placeholder.");
                 return;
             }
 
-            var pluginDetails = plugins.Select(p => new { Name = p.Title, Version = p.Version }).ToList();
+            var pluginDetails = plugins.Select((p, i) => new { Number = i + 1, Name = p.Title, Version = p.Version }).ToList();
             var embed = new
             {
-                embeds = new[]
+                embeds = new[] 
                 {
-                    new
+                    new 
                     {
                         title = "Installed Plugins",
-                        description = string.Join("\n", pluginDetails.Select(p => $"**{p.Name}** v{p.Version}")),
+                        description = string.Join("\n", pluginDetails.Select(p => $"{p.Number}. **{p.Name}** v{p.Version}")),
                         color = 3447003
                     }
                 }
@@ -150,7 +182,7 @@ namespace Oxide.Plugins
                 {
                     if (code != 200 && code != 204)
                     {
-                        Puts($"Failed to send data to Discord. Response code: {code}. Response: {response}");
+                        ConditionalPrint($"Failed to send data to Discord. Response code: {code}. Response: {response}");
 
                         if (retryCount < 3) // Retry up to 3 times
                         {
@@ -159,7 +191,7 @@ namespace Oxide.Plugins
                     }
                     else
                     {
-                        Puts("Successfully sent data to Discord!");
+                        ConditionalPrint("Successfully sent data to Discord!");
                     }
                 },
                 this,
